@@ -134,8 +134,21 @@ footer a{color:var(--blue)}
     </div>
 
     <div class="nf">
-      <label id="lblMonto" for="montoSueldo">Sueldo bruto mensual ($)</label>
+      <label id="lblMonto" for="montoSueldo">Sueldo base imponible mensual ($)</label>
       <input type="number" id="montoSueldo" placeholder="Ej: 1000000">
+    </div>
+
+    <div class="row">
+      <div class="nf">
+        <label for="bonoImponible">Bono variable imponible ($)</label>
+        <input type="number" id="bonoImponible" value="0" min="0">
+        <div class="hint">Comisiones, bonos de desempeño, etc. Cotiza AFP/salud y paga impuesto igual que el sueldo base.</div>
+      </div>
+      <div class="nf">
+        <label for="noImponible">Ítems no imponibles ($)</label>
+        <input type="number" id="noImponible" value="0" min="0">
+        <div class="hint">Movilización, colación, etc. No cotiza ni paga impuesto: se suma directo al líquido.</div>
+      </div>
     </div>
 
     <div class="row">
@@ -267,7 +280,7 @@ function updateEdadDefault(){
 
 function updateMontoLabel(){
   const tipo=document.querySelector('input[name=tipoSueldo]:checked').value;
-  document.getElementById('lblMonto').textContent = tipo==='bruto2liquido' ? 'Sueldo bruto mensual ($)' : 'Sueldo líquido mensual ($)';
+  document.getElementById('lblMonto').textContent = tipo==='bruto2liquido' ? 'Sueldo base imponible mensual ($)' : 'Sueldo líquido mensual objetivo ($)';
 }
 
 document.getElementById('saludSel').addEventListener('change',e=>{
@@ -326,14 +339,19 @@ function getParams(){
   const saludTipo=document.getElementById('saludSel').value;
   const isapreUF=parseFloat(document.getElementById('isapreUF').value)||0;
   const contrato=document.querySelector('input[name=tipoContrato]:checked').value;
+  const bonoImponible=parseFloat(document.getElementById('bonoImponible').value)||0;
+  const noImponible=parseFloat(document.getElementById('noImponible').value)||0;
   const topeAFP_UF=90, topeCesantia_UF=135;
-  return {uf, utm, afpPct, saludTipo, isapreUF, contrato, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf};
+  return {uf, utm, afpPct, saludTipo, isapreUF, contrato, bonoImponible, noImponible, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf};
 }
 
-// Dado un bruto imponible, devuelve {liquido, desglose}
-function brutoALiquido(bruto, p){
-  const baseAFP = Math.min(bruto, p.topeAFP);
-  const baseCes = Math.min(bruto, p.topeCesantia);
+// Dado un sueldo base imponible, devuelve {liquido, desglose}
+// El bono variable imponible se suma a la base antes de calcular AFP/salud/cesantía/impuesto.
+// Los ítems no imponibles se suman al final, sin pasar por ningún descuento.
+function brutoALiquido(baseSueldo, p){
+  const totalImponible = baseSueldo + p.bonoImponible;
+  const baseAFP = Math.min(totalImponible, p.topeAFP);
+  const baseCes = Math.min(totalImponible, p.topeCesantia);
 
   const afpObligatorio = baseAFP*0.10;
   const afpComision = baseAFP*(p.afpPct/100);
@@ -343,17 +361,17 @@ function brutoALiquido(bruto, p){
 
   const cesantia = p.contrato==='indefinido' ? baseCes*0.006 : 0;
 
-  const baseTributable = bruto - afpTotal - saludFinal - cesantia;
+  const baseTributable = totalImponible - afpTotal - saludFinal - cesantia;
   const impuesto = calcularImpuestoUnico(Math.max(0,baseTributable), p.utm);
 
   const totalDescuentos = afpTotal + saludFinal + cesantia + impuesto;
-  const liquido = bruto - totalDescuentos;
+  const liquido = totalImponible - totalDescuentos + p.noImponible;
 
-  return {liquido, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
+  return {liquido, baseSueldo, bonoImponible:p.bonoImponible, totalImponible, noImponible:p.noImponible, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
 }
 
 function liquidoABruto(liquidoObjetivo, p){
-  let lo=liquidoObjetivo, hi=liquidoObjetivo*2.2+100000;
+  let lo=0, hi=liquidoObjetivo*2.2+100000;
   for(let i=0;i<60;i++){
     const mid=(lo+hi)/2;
     const r=brutoALiquido(mid,p);
@@ -386,18 +404,25 @@ function calcularSueldo(){
     const r=liquidoABruto(monto,p);
     bruto=r.bruto;
     detalle=r.detalle;
-    document.getElementById('resSueldoLabel').textContent='Sueldo bruto estimado';
+    document.getElementById('resSueldoLabel').textContent='Sueldo base imponible estimado';
     document.getElementById('sueldoBig').textContent=fmt(bruto);
   }
 
+  const filaBono = detalle.bonoImponible>0 ? `<tr><td>Bono variable imponible</td><td>+${fmt(detalle.bonoImponible)}</td></tr>` : '';
+  const filaTotalImponible = detalle.bonoImponible>0 ? `<tr><td>Total imponible</td><td>${fmt(detalle.totalImponible)}</td></tr>` : '';
+  const filaNoImponible = detalle.noImponible>0 ? `<tr><td>Ítems no imponibles</td><td>+${fmt(detalle.noImponible)}</td></tr>` : '';
+
   const tabla=document.getElementById('desgloseTabla');
   tabla.innerHTML=`
-    <tr><td>Sueldo bruto</td><td>${fmt(bruto)}</td></tr>
+    <tr><td>Sueldo base imponible</td><td>${fmt(detalle.baseSueldo)}</td></tr>
+    ${filaBono}
+    ${filaTotalImponible}
     <tr><td>AFP obligatorio (10%)</td><td>-${fmt(detalle.afpObligatorio)}</td></tr>
     <tr><td>Comisión AFP</td><td>-${fmt(detalle.afpComision)}</td></tr>
     <tr><td>Salud</td><td>-${fmt(detalle.salud)}</td></tr>
     <tr><td>Seguro de cesantía</td><td>-${fmt(detalle.cesantia)}</td></tr>
     <tr><td>Impuesto único (2ª categoría)</td><td>-${fmt(detalle.impuesto)}</td></tr>
+    ${filaNoImponible}
     <tr class="total"><td>Sueldo líquido</td><td>${fmt(detalle.liquido)}</td></tr>
   `;
   document.getElementById('resSueldo').classList.add('show');
