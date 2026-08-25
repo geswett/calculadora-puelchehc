@@ -371,12 +371,12 @@ function getParams(){
   const bonoImponible=parseFloat(document.getElementById('bonoImponible').value)||0;
   const gratAuto=document.getElementById('gratAuto').checked;
   const gratManual=parseFloat(document.getElementById('gratificacionInput').value)||0;
-  const colacion=parseFloat(document.getElementById('colacion').value)||0;
+  const movilizacion=parseFloat(document.getElementById('movilizacion').value)||0;
   const alimentacion=parseFloat(document.getElementById('alimentacion').value)||0;
-  const noImponible=colacion+alimentacion;
+  const noImponible=movilizacion+alimentacion;
   const topeAFP_UF=90, topeCesantia_UF=135;
   const topeGratMensual=(4.75*imm)/12;
-  return {uf, utm, imm, afpPct, saludTipo, isapreUF, contrato, bonoImponible, gratAuto, gratManual, colacion, alimentacion, noImponible, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf, topeGratMensual};
+  return {uf, utm, imm, afpPct, saludTipo, isapreUF, contrato, bonoImponible, gratAuto, gratManual, movilizacion, alimentacion, noImponible, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf, topeGratMensual};
 }
 
 // Dado un sueldo base imponible, devuelve {liquido, desglose}
@@ -404,7 +404,7 @@ function brutoALiquido(baseSueldo, p){
   const totalDescuentos = afpTotal + saludFinal + cesantia + impuesto;
   const liquido = totalImponible - totalDescuentos + p.noImponible;
 
-  return {liquido, baseSueldo, bonoImponible:p.bonoImponible, gratificacion, totalImponible, colacion:p.colacion, alimentacion:p.alimentacion, noImponible:p.noImponible, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
+  return {liquido, baseSueldo, bonoImponible:p.bonoImponible, gratificacion, totalImponible, movilizacion:p.movilizacion, alimentacion:p.alimentacion, noImponible:p.noImponible, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
 }
 
 function liquidoABruto(liquidoObjetivo, p){
@@ -453,7 +453,7 @@ function calcularSueldo(){
   const filaBono = detalle.bonoImponible>0 ? `<tr><td>Bono variable imponible</td><td>+${fmt(detalle.bonoImponible)}</td></tr>` : '';
   const filaGrat = detalle.gratificacion>0 ? `<tr><td>Gratificación legal${p.gratAuto ? ' (Art. 50)' : ''}</td><td>+${fmt(detalle.gratificacion)}</td></tr>` : '';
   const filaTotalImponible = (detalle.bonoImponible>0 || detalle.gratificacion>0) ? `<tr><td>Total imponible</td><td>${fmt(detalle.totalImponible)}</td></tr>` : '';
-  const filaColacion = detalle.colacion>0 ? `<tr><td>Colación</td><td>+${fmt(detalle.colacion)}</td></tr>` : '';
+  const filaMovilizacion = detalle.movilizacion>0 ? `<tr><td>Movilización</td><td>+${fmt(detalle.movilizacion)}</td></tr>` : '';
   const filaAlimentacion = detalle.alimentacion>0 ? `<tr><td>Alimentación</td><td>+${fmt(detalle.alimentacion)}</td></tr>` : '';
 
   const tabla=document.getElementById('desgloseTabla');
@@ -467,7 +467,7 @@ function calcularSueldo(){
     <tr><td>Salud</td><td>-${fmt(detalle.salud)}</td></tr>
     <tr><td>Seguro de cesantía</td><td>-${fmt(detalle.cesantia)}</td></tr>
     <tr><td>Impuesto único (2ª categoría)</td><td>-${fmt(detalle.impuesto)}</td></tr>
-    ${filaColacion}
+    ${filaMovilizacion}
     ${filaAlimentacion}
     <tr class="total"><td>Sueldo líquido</td><td>${fmt(detalle.liquido)}</td></tr>
   `;
