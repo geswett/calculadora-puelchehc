@@ -122,8 +122,12 @@ footer a{color:var(--blue)}
         <label for="valUTM">Valor UTM ($)</label>
         <input type="number" id="valUTM" value="71649">
       </div>
+      <div class="nf">
+        <label for="valIMM">Ingreso Mínimo Mensual ($)</label>
+        <input type="number" id="valIMM" value="553553">
+      </div>
     </div>
-    <p class="hint" id="ufUtmStatus" style="margin-top:-8px;margin-bottom:16px;">Intentando actualizar UF/UTM automáticamente…</p>
+    <p class="hint" id="ufUtmStatus" style="margin-top:-8px;margin-bottom:16px;">Intentando actualizar UF/UTM automáticamente… El Ingreso Mínimo Mensual (IMM) se actualiza a mano.</p>
 
     <div class="nf">
       <label>¿Qué querés calcular?</label>
@@ -144,12 +148,30 @@ footer a{color:var(--blue)}
         <input type="number" id="bonoImponible" value="0" min="0">
         <div class="hint">Comisiones, bonos de desempeño, etc. Cotiza AFP/salud y paga impuesto igual que el sueldo base.</div>
       </div>
+    </div>
+
+    <div class="nf">
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;text-transform:none;font-size:12px">
+        <span style="text-transform:uppercase;font-size:11px;letter-spacing:.04em">Gratificación legal mensual ($)</span>
+        <span style="display:flex;align-items:center;gap:5px;font-weight:500;color:var(--text2)">
+          <input type="checkbox" id="gratAuto" checked style="width:auto">Calcular automático (Art. 50, tope 4,75 IMM)
+        </span>
+      </label>
+      <input type="number" id="gratificacionInput" value="0" min="0" readonly>
+      <div class="hint">Por defecto se calcula como el 25% de (sueldo base + bono), con tope mensual de 4,75 Ingresos Mínimos Mensuales ÷ 12. Desmarcá la casilla para ingresar un monto manual.</div>
+    </div>
+
+    <div class="row">
       <div class="nf">
-        <label for="noImponible">Ítems no imponibles ($)</label>
-        <input type="number" id="noImponible" value="0" min="0">
-        <div class="hint">Movilización, colación, etc. No cotiza ni paga impuesto: se suma directo al líquido.</div>
+        <label for="colacion">Colación ($)</label>
+        <input type="number" id="colacion" value="0" min="0">
+      </div>
+      <div class="nf">
+        <label for="alimentacion">Alimentación ($)</label>
+        <input type="number" id="alimentacion" value="0" min="0">
       </div>
     </div>
+    <p class="hint" style="margin-top:-10px;margin-bottom:16px;">Ítems no imponibles: no cotizan AFP/salud ni pagan impuesto, se suman directo al líquido.</p>
 
     <div class="row">
       <div class="nf">
@@ -287,6 +309,12 @@ document.getElementById('saludSel').addEventListener('change',e=>{
   document.getElementById('isapreWrap').style.display = e.target.value==='isapre' ? 'block':'none';
 });
 
+document.getElementById('gratAuto').addEventListener('change',e=>{
+  const input=document.getElementById('gratificacionInput');
+  input.readOnly = e.target.checked;
+  if(!e.target.checked) input.focus();
+});
+
 // ---------- EDAD ----------
 function calcularEdad(){
   const anio=parseInt(document.getElementById('anioEvento').value);
@@ -335,21 +363,30 @@ function calcularImpuestoUnico(baseTributable, utm){
 function getParams(){
   const uf=parseFloat(document.getElementById('valUF').value)||0;
   const utm=parseFloat(document.getElementById('valUTM').value)||0;
+  const imm=parseFloat(document.getElementById('valIMM').value)||0;
   const afpPct=parseFloat(document.getElementById('afpSel').value)||0;
   const saludTipo=document.getElementById('saludSel').value;
   const isapreUF=parseFloat(document.getElementById('isapreUF').value)||0;
   const contrato=document.querySelector('input[name=tipoContrato]:checked').value;
   const bonoImponible=parseFloat(document.getElementById('bonoImponible').value)||0;
-  const noImponible=parseFloat(document.getElementById('noImponible').value)||0;
+  const gratAuto=document.getElementById('gratAuto').checked;
+  const gratManual=parseFloat(document.getElementById('gratificacionInput').value)||0;
+  const colacion=parseFloat(document.getElementById('colacion').value)||0;
+  const alimentacion=parseFloat(document.getElementById('alimentacion').value)||0;
+  const noImponible=colacion+alimentacion;
   const topeAFP_UF=90, topeCesantia_UF=135;
-  return {uf, utm, afpPct, saludTipo, isapreUF, contrato, bonoImponible, noImponible, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf};
+  const topeGratMensual=(4.75*imm)/12;
+  return {uf, utm, imm, afpPct, saludTipo, isapreUF, contrato, bonoImponible, gratAuto, gratManual, colacion, alimentacion, noImponible, topeAFP: topeAFP_UF*uf, topeCesantia: topeCesantia_UF*uf, topeGratMensual};
 }
 
 // Dado un sueldo base imponible, devuelve {liquido, desglose}
-// El bono variable imponible se suma a la base antes de calcular AFP/salud/cesantía/impuesto.
-// Los ítems no imponibles se suman al final, sin pasar por ningún descuento.
+// El bono variable imponible y la gratificación legal se suman a la base antes de
+// calcular AFP/salud/cesantía/impuesto. Los ítems no imponibles se suman al final,
+// sin pasar por ningún descuento.
 function brutoALiquido(baseSueldo, p){
-  const totalImponible = baseSueldo + p.bonoImponible;
+  const preGrat = baseSueldo + p.bonoImponible;
+  const gratificacion = p.gratAuto ? Math.min(0.25*preGrat, p.topeGratMensual) : p.gratManual;
+  const totalImponible = preGrat + gratificacion;
   const baseAFP = Math.min(totalImponible, p.topeAFP);
   const baseCes = Math.min(totalImponible, p.topeCesantia);
 
@@ -367,7 +404,7 @@ function brutoALiquido(baseSueldo, p){
   const totalDescuentos = afpTotal + saludFinal + cesantia + impuesto;
   const liquido = totalImponible - totalDescuentos + p.noImponible;
 
-  return {liquido, baseSueldo, bonoImponible:p.bonoImponible, totalImponible, noImponible:p.noImponible, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
+  return {liquido, baseSueldo, bonoImponible:p.bonoImponible, gratificacion, totalImponible, colacion:p.colacion, alimentacion:p.alimentacion, noImponible:p.noImponible, afpObligatorio, afpComision, afpTotal, salud:saludFinal, cesantia, impuesto, totalDescuentos, baseTributable};
 }
 
 function liquidoABruto(liquidoObjetivo, p){
@@ -408,21 +445,30 @@ function calcularSueldo(){
     document.getElementById('sueldoBig').textContent=fmt(bruto);
   }
 
+  // Si la gratificación es automática, refleja el valor calculado en el campo (solo lectura).
+  if(p.gratAuto){
+    document.getElementById('gratificacionInput').value = Math.round(detalle.gratificacion);
+  }
+
   const filaBono = detalle.bonoImponible>0 ? `<tr><td>Bono variable imponible</td><td>+${fmt(detalle.bonoImponible)}</td></tr>` : '';
-  const filaTotalImponible = detalle.bonoImponible>0 ? `<tr><td>Total imponible</td><td>${fmt(detalle.totalImponible)}</td></tr>` : '';
-  const filaNoImponible = detalle.noImponible>0 ? `<tr><td>Ítems no imponibles</td><td>+${fmt(detalle.noImponible)}</td></tr>` : '';
+  const filaGrat = detalle.gratificacion>0 ? `<tr><td>Gratificación legal${p.gratAuto ? ' (Art. 50)' : ''}</td><td>+${fmt(detalle.gratificacion)}</td></tr>` : '';
+  const filaTotalImponible = (detalle.bonoImponible>0 || detalle.gratificacion>0) ? `<tr><td>Total imponible</td><td>${fmt(detalle.totalImponible)}</td></tr>` : '';
+  const filaColacion = detalle.colacion>0 ? `<tr><td>Colación</td><td>+${fmt(detalle.colacion)}</td></tr>` : '';
+  const filaAlimentacion = detalle.alimentacion>0 ? `<tr><td>Alimentación</td><td>+${fmt(detalle.alimentacion)}</td></tr>` : '';
 
   const tabla=document.getElementById('desgloseTabla');
   tabla.innerHTML=`
     <tr><td>Sueldo base imponible</td><td>${fmt(detalle.baseSueldo)}</td></tr>
     ${filaBono}
+    ${filaGrat}
     ${filaTotalImponible}
     <tr><td>AFP obligatorio (10%)</td><td>-${fmt(detalle.afpObligatorio)}</td></tr>
     <tr><td>Comisión AFP</td><td>-${fmt(detalle.afpComision)}</td></tr>
     <tr><td>Salud</td><td>-${fmt(detalle.salud)}</td></tr>
     <tr><td>Seguro de cesantía</td><td>-${fmt(detalle.cesantia)}</td></tr>
     <tr><td>Impuesto único (2ª categoría)</td><td>-${fmt(detalle.impuesto)}</td></tr>
-    ${filaNoImponible}
+    ${filaColacion}
+    ${filaAlimentacion}
     <tr class="total"><td>Sueldo líquido</td><td>${fmt(detalle.liquido)}</td></tr>
   `;
   document.getElementById('resSueldo').classList.add('show');
